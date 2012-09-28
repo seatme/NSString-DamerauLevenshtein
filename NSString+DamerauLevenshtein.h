@@ -11,6 +11,8 @@
 #import <Foundation/Foundation.h>
 
 #import "JXLDStringDistance.h"
+#import "JXLDWeights.h"
+
 
 @interface NSString (DamerauLevenshtein)
 
@@ -25,6 +27,11 @@
 // See JXLDStringDistanceOptions in JXLDStringDistance.h for a description of the options. 
 - (NSUInteger)distanceFromString:(NSString *)comparisonString options:(JXLDStringDistanceOptions)options;
 
+- (float)semanticDistanceFromString:(NSString *)comparisonString;
+- (float)semanticDistanceFromString:(NSString *)comparisonString weights:(JXLDWeights)weight;
+- (float)semanticSimilarityToString:(NSString *)comparisonString;
+- (float)semanticSimilarityToString:(NSString *)comparisonString weights:(JXLDWeights)weight;
+
 // The return value of -distanceFromString:options: is normalized to the interval [0.0f, 1.0f] (0% to 100% distance)
 - (float)normalizedDistanceFromString:(NSString *)comparisonString;
 - (float)normalizedDistanceFromString:(NSString *)comparisonString options:(JXLDStringDistanceOptions)options;
@@ -37,6 +44,9 @@
 - (float)normalizedDistanceFromString:(NSString *)comparisonString options:(JXLDStringDistanceOptions)options maximumDistance:(float)maxDistance;
 - (float)similarityToString:(NSString *)comparisonString options:(JXLDStringDistanceOptions)options minimumSimilarity:(float)minSimilarity;
 - (BOOL)hasSimilarityToString:(NSString *)comparisonString options:(JXLDStringDistanceOptions)options minimumSimilarity:(float)minSimilarity;
+
+- (NSComparisonResult)jxld_compare:(NSString *)aString options:(JXLDStringDistanceOptions)options;
+- (NSString *)jxld_transformWithOptions:(JXLDStringDistanceOptions)options;
 
 /*
  Currently this implements the restricted form of Damerau-Levenshtein. 

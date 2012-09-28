@@ -26,6 +26,53 @@ void jxld_CFStringRemoveWhitespace(CFMutableStringRef string) {
 	}
 }
 
+void jxld_CFStringReplaceDelimitersWithSpace(CFMutableStringRef string) {
+    static CFCharacterSetRef delimitersCharacterSet = nil;
+	if (delimitersCharacterSet == nil) {
+		delimitersCharacterSet = CFCharacterSetCreateWithCharactersInString(kCFAllocatorDefault, CFSTR("_-"));
+	}
+	
+	CFStringRef replacement = CFSTR(" "); 
+    jxld_CFStringReplaceCharactersInSet(string, delimitersCharacterSet, replacement);
+}
+
+void jxld_CFStringStraightenQuotes(CFMutableStringRef string) {
+	CFStringRef replacement;
+	
+    static CFCharacterSetRef doubleQuotesCharacterSet = nil;
+	if (doubleQuotesCharacterSet == nil) {
+		doubleQuotesCharacterSet = CFCharacterSetCreateWithCharactersInString(kCFAllocatorDefault, CFSTR("“”„‟＂〟〞〝❝❞»«❠"));
+	}
+	
+	replacement = CFSTR("\""); 
+    jxld_CFStringReplaceCharactersInSet(string, doubleQuotesCharacterSet, replacement);
+	
+    static CFCharacterSetRef singleQuotesCharacterSet = nil;
+	if (singleQuotesCharacterSet == nil) {
+		singleQuotesCharacterSet = CFCharacterSetCreateWithCharactersInString(kCFAllocatorDefault, CFSTR("‘’❯❮❛❜›‹‚‛❟"));
+	}
+	
+	replacement = CFSTR("\'"); 
+    jxld_CFStringReplaceCharactersInSet(string, singleQuotesCharacterSet, replacement);
+}
+
+void jxld_CFStringReplaceCharactersInSet(CFMutableStringRef string, CFCharacterSetRef delimitersCharacterSet, CFStringRef replacement) {
+	// We may be able to optimize this function by directly manipulating a UniChar buffer.
+    CFIndex string_length = CFStringGetLength(string);
+	
+	CFRange result;
+	CFRange range_to_search = CFRangeMake(0, string_length);
+	
+	while ( CFStringFindCharacterFromSet(string, 
+										 delimitersCharacterSet, 
+										 range_to_search, 
+										 kCFCompareBackwards, 
+										 &result) ) {
+		CFStringReplace(string, result, replacement);
+		range_to_search.length = result.location; // We can do this safely, because we use kCFCompareBackwards
+	}
+}
+
 void jxld_CFStringPreprocessWithOptions(CFMutableStringRef string, JXLDStringDistanceOptions options) {
 	if (!(options & JXLDLiteralComparison)) {
 		CFOptionFlags foldingOptions = 0;
@@ -40,6 +87,14 @@ void jxld_CFStringPreprocessWithOptions(CFMutableStringRef string, JXLDStringDis
 		
 		if (options & JXLDWidthInsensitiveComparison) {
 			foldingOptions |= kCFCompareWidthInsensitive;
+		}
+		
+		if (options & JXLDDelimiterInsensitiveComparison) {
+			jxld_CFStringReplaceDelimitersWithSpace(string);
+		}
+		
+		if (options & JXLDQuoteTypeInsensitiveComparison) {
+			jxld_CFStringStraightenQuotes(string);
 		}
 		
 		if (options & JXLDWhitespaceInsensitiveComparison) {

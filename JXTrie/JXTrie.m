@@ -3,7 +3,7 @@
 //  Damerau-Levenshtein
 //
 //  Created by Jan on 15.01.11.
-//  Copyright 2011 geheimwerk.de. All rights reserved.
+//  Copyright 2011-2012 geheimwerk.de. All rights reserved.
 //
 
 #import "JXTrie.h"
@@ -22,8 +22,45 @@
 @synthesize rootNode;
 
 
-void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, CFStringRef word, UniChar *word_chars, CFIndex columns, CFIndex *penultimateRow, CFIndex *previousRow, NSMutableArray *results, CFIndex maxCost);
+void searchRecursive(JXTrieNode *node, 
+					 UniChar prevLetter, UniChar thisLetter, 
+					 UniChar *word_chars, CFIndex columns, 
+					 CFIndex *penultimateRow, CFIndex *previousRow, 
+					 UniChar *result_chars, CFIndex row_index, 
+					 NSMutableArray *results, 
+					 CFIndex maxCost);
 
+NSMutableArray * searchCore(JXTrieNode *rootNode, 
+							const UniChar *string_chars, CFIndex string_length, 
+							NSUInteger maxCost);
++ (id)trie;
+{
+	return [[[JXTrie alloc] initWithOptions:0] autorelease];
+}
+
++ (id)trieWithOptions:(JXLDStringDistanceOptions)options;
+{
+	return [[[JXTrie alloc] initWithOptions:options] autorelease];
+}
+
+- (id)init;
+{
+	return [self initWithOptions:0];
+}
+
+- (id)initWithOptions:(JXLDStringDistanceOptions)options;
+{
+	self = [super init];
+	
+	if (self) {
+		rootNode = [JXTrieNode new];
+		nodeCount = 0;
+		wordCount = 0;
+		optionFlags = options;
+	}
+	
+	return self;
+}
 
 + (id)trieWithStrings:(NSArray *)wordList;
 {
@@ -42,38 +79,94 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 
 - (id)initWithStrings:(NSArray *)wordList options:(JXLDStringDistanceOptions)options;
 {
-	self = [super init];
-	if (self) {
-		self.rootNode = [JXTrieNode new];
-		nodeCount = 0;
-		wordCount = 0;
-		optionFlags = options;
-
-		if (optionFlags) {
-			CFMutableStringRef string;
-			
-			for (NSString *word in wordList) {
-				string = (CFMutableStringRef)[word mutableCopy];
-				jxld_CFStringPreprocessWithOptions(string, optionFlags);
-				
-				[self insertWord:(NSString *)string];
-				wordCount += 1;
-				
-				CFRelease(string);
-			}
-		}
-		else {
-			for (NSString *word in wordList) {
-				[self insertWord:word];
-				wordCount += 1;
-			}
-		}
+	self = [self initWithOptions:options];
+	
+	if (self == nil)  return nil;
+	
+	if (optionFlags) {
+		CFMutableStringRef string;
 		
+		for (NSString *word in wordList) {
+			string = (CFMutableStringRef)[word mutableCopy];
+			jxld_CFStringPreprocessWithOptions(string, optionFlags);
+			
+			nodeCount += [rootNode insertWord:(NSString *)string];
+			wordCount += 1;
+			
+			CFRelease(string);
+		}
+	}
+	else {
+		for (NSString *word in wordList) {
+			nodeCount += [rootNode insertWord:(NSString *)word];
+			wordCount += 1;
+		}
 	}
 	
     return self;
 }
 
+
++ (id)trieWithWordListString:(NSString *)wordListString;
+{
+	return [[[JXTrie alloc] initWithWordListString:wordListString options:0] autorelease];
+}
+
++ (id)trieWithWordListString:(NSString *)wordListString options:(JXLDStringDistanceOptions)options;
+{
+	return [[[JXTrie alloc] initWithWordListString:wordListString options:options] autorelease];
+}
+
+- (id)initWithWordListString:(NSString *)wordListString;
+{
+	return [self initWithWordListString:wordListString options:0];
+}
+
+- (id)initWithWordListString:(NSString *)wordListString options:(JXLDStringDistanceOptions)options;
+{
+	self = [self initWithOptions:options];
+	
+	if (self == nil)  return nil;
+	
+	if (optionFlags) {
+		CFMutableStringRef preparedWordListString = (CFMutableStringRef)[wordListString mutableCopy];
+		
+		jxld_CFStringPreprocessWithOptions(preparedWordListString, optionFlags);
+		
+		wordListString = [(NSString *)preparedWordListString autorelease];
+	}
+	
+	NSUInteger wordListStringLength = wordListString.length;
+	
+	const UniChar *list_chars;
+	UniChar *list_buffer = NULL;
+	
+	jxld_CFStringPrepareUniCharBuffer((CFStringRef)wordListString, &list_chars, &list_buffer, CFRangeMake(0, (CFIndex)wordListStringLength));
+	
+	NSRange fullRange = NSMakeRange(0, wordListStringLength);
+	__block NSUInteger blockNodeCount = 0;
+	__block NSUInteger blockWordCount = 0;
+	
+	[wordListString enumerateSubstringsInRange:fullRange 
+									   options:(NSStringEnumerationByLines | NSStringEnumerationSubstringNotRequired)
+									usingBlock:^(NSString *substring, NSRange substringRange, NSRange enclosingRange, BOOL *stop) {
+										//if (removeWhitespaceOnlySubstrings && ![substring ws_isBlankString]) {
+										// substringRange does NOT include the line termination character while enclosingRange does!
+										blockNodeCount += [rootNode insertWordWithUniChars:&(list_chars[substringRange.location]) 
+																					length:substringRange.length];
+										blockWordCount += 1;
+										//}
+									}];
+	
+	nodeCount += blockNodeCount;
+	wordCount += blockWordCount;
+	
+	if (list_buffer != NULL) {
+		free(list_buffer);
+	}
+	
+    return self;
+}
 
 - (void)dealloc
 {
@@ -84,26 +177,13 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 
 - (id)initWithCoder:(NSCoder *)coder
 {		
-	self = [super init];
+	self = [self init];
+	
 	if (self) {
 		self.rootNode = [coder decodeObjectForKey:@"rootNode"];
 		nodeCount = [coder decodeIntegerForKey:@"nodeCount"];
 		wordCount = [coder decodeIntegerForKey:@"wordCount"];
-		
-		BOOL caseInsensitive		= [coder decodeBoolForKey:@"caseInsensitive"];
-		BOOL literal				= [coder decodeBoolForKey:@"literal"];
-		BOOL whitespaceInsensitive	= [coder decodeBoolForKey:@"whitespaceInsensitive"];
-		BOOL whitespaceTrimming		= [coder decodeBoolForKey:@"whitespaceTrimming"];
-		BOOL diacriticInsensitive	= [coder decodeBoolForKey:@"diacriticInsensitive"];
-		BOOL widthInsensitive		= [coder decodeBoolForKey:@"widthInsensitive"];
-		
-		optionFlags = 0;
-		if (caseInsensitive)		optionFlags |= JXLDCaseInsensitiveComparison;
-		if (literal)				optionFlags |= JXLDLiteralComparison;
-		if (whitespaceInsensitive)	optionFlags |= JXLDWhitespaceInsensitiveComparison;
-		if (whitespaceTrimming)		optionFlags |= JXLDWhitespaceTrimmingComparison;
-		if (diacriticInsensitive)	optionFlags |= JXLDDiacriticInsensitiveComparison;
-		if (widthInsensitive)		optionFlags |= JXLDWidthInsensitiveComparison;
+		optionFlags = [coder decodeIntegerForKey:@"optionFlags"];
 	}
 	
 	return self;
@@ -114,20 +194,7 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 	[coder encodeObject:rootNode forKey:@"rootNode"];
 	[coder encodeInteger:nodeCount forKey:@"nodeCount"];
 	[coder encodeInteger:wordCount forKey:@"wordCount"];
-	
-	BOOL caseInsensitive		 = optionFlags & JXLDCaseInsensitiveComparison;
-	BOOL literal				 = optionFlags & JXLDLiteralComparison;
-	BOOL whitespaceInsensitive	 = optionFlags & JXLDWhitespaceInsensitiveComparison;
-	BOOL whitespaceTrimming		 = optionFlags & JXLDWhitespaceTrimmingComparison;
-    BOOL diacriticInsensitive	 = optionFlags & JXLDDiacriticInsensitiveComparison;
-    BOOL widthInsensitive		 = optionFlags & JXLDWidthInsensitiveComparison;
-	
-	[coder encodeBool:caseInsensitive		forKey:@"caseInsensitive"];
-	[coder encodeBool:literal				forKey:@"literal"];
-	[coder encodeBool:whitespaceInsensitive	forKey:@"whitespaceInsensitive"];
-	[coder encodeBool:whitespaceTrimming	forKey:@"whitespaceTrimming"];
-	[coder encodeBool:diacriticInsensitive	forKey:@"diacriticInsensitive"];
-	[coder encodeBool:widthInsensitive		forKey:@"widthInsensitive"];
+	[coder encodeInteger:optionFlags forKey:@"optionFlags"];
 }
 
 
@@ -145,15 +212,31 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 - (void)insertWord:(NSString *)newWord;
 {
 	nodeCount += [self.rootNode insertWord:newWord];
+	wordCount += 1;
+	//NSLog(@"\n%@", [self description]);
+}
+
+- (void)insertWordWithUniChars:(const UniChar *)chars length:(CFIndex)length;
+{
+	nodeCount += [self.rootNode insertWordWithUniChars:chars length:length];
+	wordCount += 1;
 	//NSLog(@"\n%@", [self description]);
 }
 
 // This recursive helper is used by the search function above. It assumes that
 // the previousRow has been filled in already.
-void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, CFStringRef word, UniChar *word_chars, CFIndex columns, CFIndex *penultimateRow, CFIndex *previousRow, NSMutableArray *results, CFIndex maxCost) {
+void searchRecursive(JXTrieNode *node, 
+					 UniChar prevLetter, UniChar thisLetter, 
+					 UniChar *word_chars, CFIndex columns, 
+					 CFIndex *penultimateRow, CFIndex *previousRow, 
+					 UniChar *result_chars, CFIndex row_index, 
+					 NSMutableArray *results, 
+					 CFIndex maxCost) {
 	
+	result_chars[row_index] = thisLetter;
+
 	CFIndex currentRowLastIndex = columns - 1;
-	CFIndex currentRow[columns];
+	CFIndex *currentRow = malloc(columns * sizeof(CFIndex));
 	currentRow[0] = previousRow[0] + 1;
 	
 	CFIndex cost;
@@ -194,9 +277,11 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 	
 	// If the last entry in the row indicates the optimal cost is less than the
 	// maximum cost, and there is a word in this trie node, then add it.
-	if (currentRow[currentRowLastIndex] <= maxCost && node.word != nil) {
-		[results addObject:[JXTrieResult resultWithWord:(NSString *)node.word 
+	if (currentRow[currentRowLastIndex] <= maxCost && node.hasWord) {
+		CFStringRef nodeWord = CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, result_chars, row_index+1, kCFAllocatorNull);
+		[results addObject:[JXTrieResult resultWithWord:(NSString *)nodeWord 
 											andDistance:currentRow[currentRowLastIndex]]];
+		CFRelease(nodeWord);
 	}
 	
 	CFIndex currentRowMinCost = currentRow[0];
@@ -207,10 +292,61 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 	// If any entries in the row are less than the maximum cost, then 
 	// recursively search each branch of the trie
 	if (currentRowMinCost <= maxCost) {
-		for (NSString *nextLetter in node.children) {
-			searchRecursive( [node.children objectForKey:nextLetter], thisLetter, [nextLetter characterAtIndex:0], word, word_chars, columns, previousRow, currentRow, results, maxCost);
+		UniChar *keys;
+		CFIndex keys_count = [node children_keys:&keys];
+		UniChar nextLetter;
+
+		for (CFIndex i = 0; i < keys_count; i++) {
+			nextLetter = keys[i];
+			JXTrieNode *nextNode = (JXTrieNode *)CFDictionaryGetValue(node.children, (void *)nextLetter);
+			searchRecursive(nextNode, 
+							thisLetter, nextLetter, 
+							word_chars, columns, 
+							previousRow, currentRow, 
+							result_chars, row_index+1, 
+							results, 
+							maxCost);
 		}
 	}
+	
+	free(currentRow);
+}
+
+NSMutableArray * searchCore(JXTrieNode *rootNode, 
+							const UniChar *string_chars, CFIndex string_length, 
+							NSUInteger maxCost) {
+	// build first row
+    CFIndex currentRowSize = string_length + 1;
+	CFIndex currentRow[currentRowSize];
+	for (CFIndex k = 0; k < currentRowSize; k++) {
+		currentRow[k] = k;
+	}
+	
+	NSMutableArray *results = [NSMutableArray array];
+	
+	CFMutableDictionaryRef rootNodeChildren = rootNode.children;
+	
+	UniChar *result_chars = malloc(string_length+maxCost * sizeof(UniChar));
+	
+	UniChar *keys;
+	CFIndex keys_count = [rootNode children_keys:&keys];
+	UniChar nextLetter;
+	// recursively search each branch of the trie
+	for (CFIndex i = 0; i < keys_count; i++) {
+		nextLetter = keys[i];
+		JXTrieNode *nextNode = (JXTrieNode *)CFDictionaryGetValue(rootNodeChildren, (void *)nextLetter);
+		searchRecursive(nextNode, 
+						0, nextLetter, 
+						(UniChar *)string_chars, string_length+1, 
+						NULL, currentRow, 
+						result_chars, 0, 
+						results, 
+						maxCost);
+	}
+    
+	if (result_chars != NULL)  free(result_chars);
+	
+    return results;
 }
 
 - (NSArray *)search:(NSString *)word maximumDistance:(NSUInteger)maxCost;
@@ -231,32 +367,30 @@ void searchRecursive(JXTrieNode *node, UniChar prevLetter, UniChar thisLetter, C
 
 	jxld_CFStringPrepareUniCharBuffer(string, &string_chars, &string_buffer, CFRangeMake(0, string_length));
 	
-	// build first row
-	CFIndex currentRowSize = string_length + 1;
-	CFIndex currentRow[currentRowSize];
-	for (CFIndex k = 0; k < currentRowSize; k++) {
-		currentRow[k] = k;
-	}
+    NSMutableArray *results = searchCore(self.rootNode, string_chars, string_length, maxCost);
 	
-	NSMutableArray *results = [NSMutableArray array];
-	
-	NSMutableDictionary *rootNodeChildren = self.rootNode.children;
-	
-	// recursively search each branch of the trie
-	for (NSString *letter in rootNodeChildren) {
-		searchRecursive([rootNodeChildren objectForKey:letter], 0, [letter characterAtIndex:0], string, (UniChar *)string_chars, string_length+1, NULL, currentRow, 
-						results, maxCost);
-	}
-		
-	if (string_buffer != NULL) {
-		free(string_buffer);
-	}
+	if (string_buffer != NULL)  free(string_buffer);
 	
 	CFRelease(string);
 
 	return results;
 }
 
+- (NSArray *)searchForUniChar:(const UniChar *)chars length:(CFIndex)length maximumDistance:(NSUInteger)maxCost;
+{
+	NSArray *results;
+	
+	if (optionFlags) {
+		CFStringRef string = CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, chars, length, kCFAllocatorNull);
+		results = [self search:(NSString *)string maximumDistance:maxCost];
+		CFRelease(string);
+	}
+	else {
+		results = searchCore(self.rootNode, chars, length, maxCost);
+	}
+	
+	return results;
+}
 
 - (NSString *)description
 {

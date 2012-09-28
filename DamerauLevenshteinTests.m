@@ -3,7 +3,7 @@
 //  Damerau-Levenshtein
 //
 //  Created by Jan on 02.01.11.
-//  Copyright 2011 geheimwerk.de. All rights reserved.
+//  Copyright 2011-2012 geheimwerk.de. All rights reserved.
 //
 
 #import "DamerauLevenshteinTests.h"
@@ -152,6 +152,58 @@ NSString *DamerauLevenshteinTestsLongString2;
 	STAssertEquals((NSUInteger)0, levensteinDistance, @"Width insensitive test failed.");
 }
 
+- (void)test_delimiters {
+	NSString *textWithDelimiters = @"string-delimiter_matcher";
+	NSString *textWithoutDelimiters = @"string delimiter matcher";
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:0];
+	STAssertEquals((NSUInteger)2, levensteinDistance, @"Delimiters sensitive test failed.");
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:JXLDDelimiterInsensitiveComparison];
+	STAssertEquals((NSUInteger)0, levensteinDistance, @"Delimiters insensitive test failed.");
+}
+
+- (void)test_delimiters_whitespace_trimming {
+	NSString *textWithDelimiters = @"__string-delimiter_matcher--";
+	NSString *textWithoutDelimiters = @"string delimiter matcher";
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:0];
+	STAssertEquals((NSUInteger)6, levensteinDistance, @"Delimiters sensitive test failed.");
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:JXLDDelimiterInsensitiveComparison | JXLDWhitespaceTrimmingComparison];
+	STAssertEquals((NSUInteger)0, levensteinDistance, @"Delimiters insensitive test failed.");
+}
+
+- (void)test_delimiters_whitespace_insensitive {
+	NSString *textWithDelimiters = @"__string-delimiter_matcher--";
+	NSString *textWithoutDelimiters = @"stringdelimitermatcher";
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:0];
+	STAssertEquals((NSUInteger)6, levensteinDistance, @"Delimiters sensitive test failed.");
+	
+	levensteinDistance = [textWithDelimiters distanceFromString:textWithoutDelimiters 
+														options:JXLDDelimiterInsensitiveComparison | JXLDWhitespaceInsensitiveComparison];
+	STAssertEquals((NSUInteger)0, levensteinDistance, @"Delimiters insensitive test failed.");
+}
+
+- (void)test_quote_types {
+	NSString *textWithSmartQuotes = @"“It’s a boy!”";
+	NSString *textWithStraightQuotes = @"\"It's a boy!\"";
+	
+	levensteinDistance = [textWithSmartQuotes distanceFromString:textWithStraightQuotes 
+														options:0];
+	STAssertEquals((NSUInteger)3, levensteinDistance, @"Quote type sensitive test failed.");
+	
+	levensteinDistance = [textWithSmartQuotes distanceFromString:textWithStraightQuotes 
+														options:JXLDQuoteTypeInsensitiveComparison];
+	STAssertEquals((NSUInteger)0, levensteinDistance, @"Quote type insensitive test failed.");
+}
+
 - (void)test_real_world {
 	NSString *string1 = @"kitten";
 	NSString *string2 = @"sitting";
@@ -234,4 +286,10 @@ NSString *DamerauLevenshteinTestsLongString2;
 	levensteinDistance = [DamerauLevenshteinTestsLongString1 distanceFromString:DamerauLevenshteinTestsLongString2];
 	STAssertEquals((NSUInteger)127*LONG_STRING_EXPANSION_FACTOR, levensteinDistance, @"Perfomance test failed.");
 }
+
+- (void)test_semantic_similarity_performance {
+	float semanticSimilarity = [DamerauLevenshteinTestsLongString1 semanticSimilarityToString:DamerauLevenshteinTestsLongString2];
+	STAssertTrue((semanticSimilarity < 1.0f), @"Semantic Similarity Perfomance test failed.");
+}
+
 @end
