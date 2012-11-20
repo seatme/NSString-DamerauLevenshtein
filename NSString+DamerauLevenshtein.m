@@ -358,9 +358,7 @@ float semanticStringDistance(CFStringRef string1, CFStringRef string2, JXLDWeigh
 - (float)semanticDistanceFromString:(NSString *)comparisonString weights:(JXLDWeights)weights;
 {
 	JXLDStringDistanceOptions options = JXLDDelimiterInsensitiveComparison | JXLDWhitespaceTrimmingComparison;
-	
-	CFStringRef string1, string2;
-	
+
 	CFMutableStringRef string1_mutable = (__bridge_retained CFMutableStringRef)[self mutableCopy];
 	CFMutableStringRef string2_mutable = (__bridge_retained CFMutableStringRef)[comparisonString mutableCopy];
 	
