@@ -465,8 +465,6 @@ float semanticStringDistance(CFStringRef string1, CFStringRef string2, JXLDWeigh
 
 - (NSString *)jxld_transformWithOptions:(JXLDStringDistanceOptions)options;
 {
-	NSString *result;
-	
 	CFMutableStringRef string1_mutable = (__bridge CFMutableStringRef)[self mutableCopy];
 	
 	jxld_CFStringPreprocessWithOptions(string1_mutable, options);
